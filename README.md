@@ -28,6 +28,10 @@ This project shows comands to create and observe the deployments, pods, jobs, cr
 ### View progress of cronjob
 - `kubectl get jobs --watch`
 
+## Installing client-go
+- `go get k8s.io/client-go@HEAD`
+- For more details visit "https://github.com/kubernetes/client-go/blob/master/INSTALL.md"
+
 ## Run client-go example out-of-cluster-client-configurations
 - `git clone https://github.com/gopay-bootcamp/kubernets-POC.git`
 - `cd kubernets-POC`
