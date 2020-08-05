@@ -8,6 +8,7 @@ import (
 	"io"
 	batch "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/clientcmd"
 	"net/http"
 	"os"
@@ -165,3 +166,43 @@ func (client *kubernetesClient) ExecuteJobWithCommand(imageName string, envMap m
 	}
 	return executionName, nil
 }
+
+func jobLableSelector(executionName string) string {
+	return fmt.Sprintf("job=%s", executionName)
+}
+
+func (client *kubernetesClient) JobExecutionStatus(executionName string) (string, error) {
+	batchV1 := client.clientSet.BatchV1()
+	kubernetsJobs := batchV1.Jobs(namespace)
+	listOptions := meta.ListOptions {
+		TypeMeta:	typeMeta,
+		LabelSelector: jobLableSelector(executionName),
+	}
+
+	watchJob, err := kubernetsJobs.Watch(nil, listOptions)
+	if err != nil {
+		return "FAILED", err
+	}
+
+	resultChan := watchJob.ResultChan()
+	defer watchJob.Stop()
+	var event watch.Event
+	var jobEvent *batch.Job
+
+	for event = range resultChan {
+		if event.Type == watch.Error {
+			return "JOB_EXECUTION_STATUS_FETCH_ERROR", nil
+		}
+
+		jobEvent = event.Object.(*batch.Job)
+		if jobEvent.Status.Succeeded >= int32(1) {
+			return "SUCCEEDED", nil
+		} else if jobEvent.Status.Failed >= int32(1) {
+			return "FAILED", nil
+		}
+	}
+
+	return "NO_DEFINITIVE_JOB_EXECUTION_STATUS_FOUND", nil
+}
+
+
