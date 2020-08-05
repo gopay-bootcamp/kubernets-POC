@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,14 +52,14 @@ type ProctorConfig struct {
 func load() ProctorConfig {
 	fang := viper.New()
 
-	fang.SetEnvPrefix("PROCTOR")
-	fang.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	fang.AutomaticEnv()
-
-	fang.SetConfigFile("config")
 	fang.AddConfigPath(".")
+	fang.SetConfigFile("config.yaml")
 
-	_ = fang.ReadInConfig()
+	err := fang.ReadInConfig()
+
+	if err != nil {
+		panic(fmt.Errorf("Fatal error: Config file: %s\n", err))
+	}
 
 	proctorConfig := ProctorConfig{
 		viper:	fang,
@@ -76,9 +75,7 @@ func load() ProctorConfig {
 		KubeServiceAccountName: fang.GetString("kube.service.account.name"),
 		JobPodAnnotations: GetMapFromJson(fang, "job.pod.annotations"),
 	}
-	fmt.Println(proctorConfig.viper)
-	fmt.Println(proctorConfig.KubeConfig)
-	fmt.Println(proctorConfig.JobPodAnnotations["key.one"])
+	fmt.Println(fang)
 
 	return proctorConfig
 }
