@@ -40,8 +40,8 @@ type kubernetesClient struct {
 }
 
 type KubernetesClient interface {
-	ExecuteJobWithCommand(imagename string, args map[string]string, commands []string) (string, error)
-	ExecuteJob(imagename string, args map[string]string) (string, error)
+	ExecuteJobWithCommand(imageName string, args map[string]string, commands []string) (string, error)
+	ExecuteJob(imageName string, args map[string]string) (string, error)
 	JobExecutionStatus(jobName string) (string, error)
 	GetPodLogs(pod *v1.Pod) (io.ReadCloser, error)
 }
@@ -179,7 +179,14 @@ func (client *kubernetesClient) JobExecutionStatus(executionName string) (string
 		LabelSelector: jobLableSelector(executionName),
 	}
 
-	watchJob, err := kubernetsJobs.Watch(nil, listOptions)
+	var (
+		ctx context.Context
+		cancel context.CancelFunc
+	)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	watchJob, err := kubernetsJobs.Watch(ctx, listOptions)
 	if err != nil {
 		return "FAILED", err
 	}
@@ -205,4 +212,25 @@ func (client *kubernetesClient) JobExecutionStatus(executionName string) (string
 	return "NO_DEFINITIVE_JOB_EXECUTION_STATUS_FOUND", nil
 }
 
+func (client *kubernetesClient) GetPodLogs(pod *v1.Pod) (io.ReadCloser, error) {
+	//logger.Debug("reading pod logs for: ", pod.Name)
+	podLogOpts := v1.PodLogOptions{
+		Follow: true,
+	}
 
+	var (
+		ctx context.Context
+		cancel context.CancelFunc
+	)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+
+	request := client.clientSet.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &podLogOpts)
+	response, err := request.Stream(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
