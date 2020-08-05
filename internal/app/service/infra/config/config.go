@@ -63,7 +63,7 @@ func load() ProctorConfig {
 
 	proctorConfig := ProctorConfig{
 		viper:	fang,
-		KubeConfig: fang.GetString("kube_config"),
+		KubeConfig: fang.GetString("kube.config"),
 		KubeContext: fang.GetString("kube.context"),
 		LogLevel: fang.GetString("log.level"),
 		AppPort: fang.GetString("app.port"),
@@ -75,7 +75,6 @@ func load() ProctorConfig {
 		KubeServiceAccountName: fang.GetString("kube.service.account.name"),
 		JobPodAnnotations: GetMapFromJson(fang, "job.pod.annotations"),
 	}
-	fmt.Println(fang)
 
 	return proctorConfig
 }

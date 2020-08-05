@@ -47,7 +47,7 @@ type KubernetesClient interface {
 
 func NewClientSet() (*kubernetes.Clientset, error) {
 	var kubeConfig *kubeRestClient.Config
-	fmt.Println(config.Config().KubeConfig)
+
 	if config.Config().KubeConfig == "out-of-cluster" {
 		//logger.Info("service is running outside kube cluster")
 		fmt.Println("service is running outside kube cluster")
