@@ -1,0 +1,13 @@
+kube:
+  config: out-of-cluster
+  context: minikube
+  job:
+    active.deadline.seconds: 60
+    retries: 0
+  service.account.name: default
+  wait.for.resource.poll.count: 5
+  log.process.wait.time: 60
+log.level: debug
+app.port: 5000
+default.namespace: default
+job.pod.annotations: "{\"key.one\":\"true\"}"

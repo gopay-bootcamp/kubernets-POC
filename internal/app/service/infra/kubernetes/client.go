@@ -1,22 +1,28 @@
 package kubernetes
 
 import (
+	"context"
 	"errors"
-	"honnef.co/go/tools/config"
+	"fmt"
+	uuid "github.com/satori/go.uuid"
 	"io"
-	"net/http"
-
+	batch "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/clientcmd"
+	"net/http"
+	"os"
+	"path/filepath"
+
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	kubeRestClient "k8s.io/client-go/rest"
+	"out-of-cluster-client-configuration/internal/app/service/infra/config"
 )
 
 var (
 	typeMeta meta.TypeMeta
 	namespace string
 	timeoutError = errors.New("timeout when waiting job to be available")
-	config2  map[string]string
 )
 
 func init() {
@@ -25,9 +31,6 @@ func init() {
 		APIVersion: "batch/v1",
 	}
 	namespace = "default"
-	config2 = map[string]string{
-		"namespace" : "default",
-	}
 }
 
 type kubernetesClient struct {
@@ -43,13 +46,63 @@ type KubernetesClient interface {
 }
 
 func NewClientSet() (*kubernetes.Clientset, error) {
-	kubeConfig, err := kubeRestClient.InClusterConfig()
+	var kubeConfig *kubeRestClient.Config
+	fmt.Println(config.Config().KubeConfig)
+	if config.Config().KubeConfig == "out-of-cluster" {
+		//logger.Info("service is running outside kube cluster")
+		fmt.Println("service is running outside kube cluster")
+		home := os.Getenv("HOME")
+
+		kubeConfigPath := filepath.Join(home, ".kube", "config")
+
+		configOverrides := &clientcmd.ConfigOverrides{}
+		if config.Config().KubeContext != "default" {
+			configOverrides.CurrentContext = config.Config().KubeContext
+		}
+
+		var err error
+		kubeConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath},
+			configOverrides).ClientConfig()
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		var err error
+		kubeConfig, err = kubeRestClient.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	clientSet, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
 		return nil, err
 	}
-	clientSet, err := kubernetes.NewForConfig(kubeConfig)
-
 	return clientSet, nil
+}
+
+func uniqueName() string {
+	return "proctor" + "-" + uuid.NewV4().String()
+}
+
+func jobLabel(executionName string) map[string]string {
+	return map[string]string{
+		"job": executionName,
+	}
+}
+
+func getEnvVars(envMap map[string]string) []v1.EnvVar {
+	var envVars []v1.EnvVar
+	for k, v := range envMap {
+		envVar := v1.EnvVar{
+			Name:  k,
+			Value: v,
+		}
+		envVars = append(envVars, envVar)
+	}
+	return envVars
 }
 
 func (client *kubernetesClient) ExecuteJobWithCommand(imageName string, envMap map[string]string, command []string) (string, error) {
@@ -98,7 +151,15 @@ func (client *kubernetesClient) ExecuteJobWithCommand(imageName string, envMap m
 		Spec:       jobSpec,
 	}
 
-	_, err := kubernetesJobs.Create(&jobToRun)
+	var (
+		ctx context.Context
+		cancel context.CancelFunc
+	)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err := kubernetesJobs.Create(ctx, &jobToRun, meta.CreateOptions{})
 	if err != nil {
 		return "", err
 	}
