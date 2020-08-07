@@ -10,7 +10,6 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/clientcmd"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,17 +21,17 @@ import (
 )
 
 var (
-	typeMeta meta.TypeMeta
-	namespace string
+	typeMeta     meta.TypeMeta
+	namespace    string
 	timeoutError = errors.New("timeout when waiting job to be available")
 
-	ctx context.Context
+	ctx    context.Context
 	cancel context.CancelFunc
 )
 
 func init() {
 	typeMeta = meta.TypeMeta{
-		Kind: "Job",
+		Kind:       "Job",
 		APIVersion: "batch/v1",
 	}
 	namespace = "default"
@@ -40,7 +39,6 @@ func init() {
 
 type kubernetesClient struct {
 	clientSet kubernetes.Interface
-	httpClient *http.Client
 }
 
 type KubernetesClient interface {
@@ -50,12 +48,27 @@ type KubernetesClient interface {
 	GetPodLogs(pod *v1.Pod) (io.ReadCloser, error)
 	WaitForReadyJob(executionName string, waitTime time.Duration) error
 	WaitForReadyPod(executionName string, waitTime time.Duration) (*v1.Pod, error)
+	ListPod(namespace string, options meta.ListOptions) ([]v1.Pod, error)
 }
 
-func NewClientSet() (*kubernetes.Clientset, error) {
+func (client *kubernetesClient) ListPod(namespace string, options meta.ListOptions) ([]v1.Pod, error) {
+	coreV1 := client.clientSet.CoreV1()
+	pods := coreV1.Pods(namespace)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	podList, err := pods.List(ctx, options)
+	if err != nil {
+		return nil, err
+	}
+
+	return podList.Items, nil
+}
+
+func NewClientSet(proctorConfig config.ProctorConfig) (*kubernetes.Clientset, error) {
 	var kubeConfig *kubeRestClient.Config
 
-	if config.Config().KubeConfig == "out-of-cluster" {
+	if proctorConfig.KubeConfig == "out-of-cluster" {
 		//logger.Info("service is running outside kube cluster")
 		fmt.Println("service is running outside kube cluster")
 		home := os.Getenv("HOME")
@@ -90,11 +103,11 @@ func NewClientSet() (*kubernetes.Clientset, error) {
 	return clientSet, nil
 }
 
-func NewKubernetesClient(httpClient *http.Client) (KubernetesClient, error) {
-	client := &kubernetesClient{httpClient: httpClient}
+func NewKubernetesClient(proctorConfig config.ProctorConfig) (KubernetesClient, error) {
+	client := &kubernetesClient{}
 
 	var err error
-	client.clientSet, err = NewClientSet()
+	client.clientSet, err = NewClientSet(proctorConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -194,8 +207,8 @@ func (client *kubernetesClient) ExecuteJobWithCommand(imageName string, envMap m
 func (client *kubernetesClient) JobExecutionStatus(executionName string) (string, error) {
 	batchV1 := client.clientSet.BatchV1()
 	kubernetesJobs := batchV1.Jobs(namespace)
-	listOptions := meta.ListOptions {
-		TypeMeta:	typeMeta,
+	listOptions := meta.ListOptions{
+		TypeMeta:      typeMeta,
 		LabelSelector: jobLabelSelector(executionName),
 	}
 
