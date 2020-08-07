@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,15 +53,18 @@ type ProctorConfig struct {
 
 func load() ProctorConfig {
 	fang := viper.New()
-
+	fang.SetEnvPrefix("PROCTOR")
+	fang.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	fang.AutomaticEnv()
+	fang.SetConfigName("config")
 	fang.AddConfigPath(".")
-	fang.SetConfigFile("config.yaml")
 
-	err := fang.ReadInConfig()
-
-	if err != nil {
-		panic(fmt.Errorf("Fatal error: Config file: %s\n", err))
+	value, available := os.LookupEnv("CONFIG_LOCATION")
+	if available {
+		fang.AddConfigPath(value)
 	}
+
+	_ = fang.ReadInConfig()
 
 	proctorConfig := ProctorConfig{
 		viper:	fang,
